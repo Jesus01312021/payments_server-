@@ -1,0 +1,191 @@
+payment = zoho.crm.getRecordById("Process_Payments",id);
+status = payment.get("Outcome");
+source = payment.get("Method");
+owner = payment.get("Owner");
+agent = payment.get("Owner").get("name");
+method = payment.get("Method");
+send = payment.get("Send_Email_SMS");
+reason_payment = payment.get("Type");
+amountPayment = payment.get("Amount");
+paymentDate = payment.get("Date");
+payment_code = payment.get("Name");
+codes = Map();
+unsortedMap = Map();
+sortedList = List();
+sortingKeys = List();
+cart = "";
+desc = "";
+discountPayment = payment.get("Discount");
+if(discountPayment == null)
+{
+	discountPayment = 0;
+}
+finalAmountPayment = amountPayment.toDecimal() - discountPayment.toDecimal();
+sale_id = payment.get("Service_Number").get("id");
+sale = zoho.crm.getRecordById("Customers",sale_id);
+serviceNumber = sale.get("Name");
+queryMap = Map();
+tCount = 0;
+rec = null;
+if(reason_payment == "Engineering")
+{
+	codes.put("Deposit","D");
+	codes.put("One off works","OOF");
+	codes.put("No Access Fee","NAF");
+	codes.put("Call Out Fee","COF");
+	codes.put("Install","I");
+	engType = payment.get("Engineering_Type");
+	desc = engType;
+	queryMap.put("select_query","select Amount, Owner, id, Discount, Date, Outcome, Method from Process_Payments where (((Service_Number.Name = '" + serviceNumber + "') and (Engineering_Type = '" + desc + "')) and (Type = 'Engineering')) ORDER BY Date DESC");
+	rec = invokeurl
+	[
+		url :"https://www.zohoapis.eu/crm/v3/coql"
+		type :POST
+		parameters:queryMap.toString()
+		connection:"crmconnection"
+	];
+	tCount = rec.get("data").size();
+	cart = serviceNumber + "-" + codes.get(engType) + "-" + tCount.toString();
+}
+else
+{
+	codes.put("Contractual Payment","CP");
+	codes.put("Work Not Covered","WNC");
+	codes.put("Deposit","D");
+	codes.put("Refunds","R");
+	codes.put("Debtor Payment","DP");
+	desc = reason_payment;
+	queryMap.put("select_query","select Amount, Owner, id, Discount, Date, Outcome, Method from Process_Payments where Service_Number.Name = '" + serviceNumber + "' and Type = '" + desc + "' ORDER BY Date DESC");
+	rec = invokeurl
+	[
+		url :"https://www.zohoapis.eu/crm/v3/coql"
+		type :POST
+		parameters:queryMap.toString()
+		connection:"crmconnection"
+	];
+	tCount = rec.get("data").size();
+	cart = serviceNumber + "-" + codes.get(reason_payment) + "-" + tCount.toString();
+}
+count = tCount;
+for each  newPay in rec.get("data")
+{
+	newPayment = Map();
+	num = count.toString();
+	newPayment.put("id",newPay.get("id"));
+	newPayment.put("Name",desc + "-" + num);
+	sortedList.add(newPayment);
+	count = count - 1;
+}
+payObj = Map();
+payObj.put("obj",sortedList);
+resp = invokeurl
+[
+	url :"https://payments-server.boilercompanyuk.com/updatePaymentReference"
+	type :POST
+	parameters:payObj.toString()
+	content-type:"application/json"
+];
+response = standalone.UpdatePaymentLog(serviceNumber,sale_id);
+info response;
+if(method == "Worldpay")
+{
+	payUpdate = {"Cart_Id":cart};
+	pyaResp = zoho.crm.updateRecord("Process_Payments",id,payUpdate);
+	paymentMap = Map();
+	paymentMap.put("desc",cart);
+	paymentMap.put("cartId",cart);
+	sale_id = payment.get("Service_Number").get("id");
+	sale = zoho.crm.getRecordById("Customers",sale_id);
+	paymentMap.put("amount",finalAmountPayment);
+	company = sale.get("Company1");
+	paymentMap.put("ServiceNumber",serviceNumber);
+	paymentMap.put("company",company);
+	// Address Information
+	account_id = sale.get("Account").get("id");
+	account = zoho.crm.getRecordById("Payments_Information",account_id);
+	address_id = account.get("Address").get("id");
+	address = zoho.crm.getRecordById("Customers_Profile",address_id);
+	doorNumber = address.get("DoorNumber");
+	addLine1 = address.get("Address_1");
+	addLine2 = address.get("Address_2");
+	postcode = address.get("Name");
+	town = address.get("Town");
+	addressMap = Map();
+	addressMap.put("doornumber",doorNumber);
+	addressMap.put("addressline1",addLine1);
+	addressMap.put("addressline2",addLine2);
+	addressMap.put("city",town);
+	addressMap.put("postcode",postcode);
+	// Customer Information
+	customer_id = sale.get("Customer").get("id");
+	customer = zoho.crm.getRecordById("Contacts",customer_id);
+	firstName = customer.get("First_Name");
+	lastName = customer.get("Last_Name");
+	mobile = customer.get("Mobile");
+	phone = customer.get("Phone");
+	email = customer.get("Email");
+	phoneFinal = "";
+	if(mobile == "" || mobile == null)
+	{
+		phoneFinal = phone;
+	}
+	else
+	{
+		phoneFinal = mobile;
+	}
+	customerMap = Map();
+	customerMap.put("firstName",firstName);
+	customerMap.put("lastName",lastName);
+	customerMap.put("phone",phoneFinal);
+	customerMap.put("email",email);
+	finalObj = Map();
+	finalObj.put("paymentDesc",paymentMap);
+	finalObj.put("customerInfo",customerMap);
+	finalObj.put("addressInfo",addressMap);
+	info finalObj;
+	if(send == "SMS Link")
+	{
+		result = invokeurl
+		[
+			url :"https://message-server.boilercompanyuk.com/sendPaymentMessage"
+			type :POST
+			parameters:finalObj.toJSONList().toString()
+			content-type:"application/json"
+		];
+	}
+	else if(send == "Agent Link")
+	{
+		agents = Map();
+		agents.put("Ethan Carlton","ethanspayments");
+		agents.put("Jess Bealey","jesspayments");
+		agents.put("Rhys Turner","rhyspayments");
+		agents.put("Max Milroy","maxpayments");
+		agents.put("Eric Manuel","ericspayments");
+		agents.put("James Dowling","jamespayments");
+		companies = {"The Boiler Company":"TheBoilerCo","Appliance Sure":"APS Ltd","Smart Plan":"Smart Plan","Boiler Safe":"Boiler Safe"};
+		comp = {"SP":"Smart Plan","Smart Plan":"Smart Plan","APS":"Appliance Sure","APSY":"Appliance Sure","APSI":"Appliance Sure","APSH":"Appliance Sure","APSM":"Appliance Sure","APSS":"Appliance Sure","TBC":"The Boiler Company","STBC":"The Boiler Company","USB":"The Boiler Company","ATBC":"The Boiler Company","WTBC":"The Boiler Company","XTBC":"The Boiler Company","BSU":"Boiler Safe UK","PBSU":"Boiler Safe UK"};
+		newComp = comp.get(company);
+		c = companies.get(newComp);
+		compShort = {"TheBoilerCo":"the-boiler-company","APS Ltd":"appliance-sure","Smart Plan":"smart-plan","Boiler Safe":"boiler-safe-uk"};
+		finalCompany = compShort.get(c);
+		link = "https://secure.pay-bill.boilercompanyuk.com/" + finalCompany + "?amount=" + finalAmountPayment + "&testMode=0&cartId=" + cart + "&serviceNumber=" + serviceNumber + "&firstName=" + firstName + "&lastName=" + lastName + "&email=" + email + "&phone=" + phoneFinal + "&doornumber=" + doorNumber + "&addressline1=" + addLine1 + "&adderssline2=" + addLine2 + "&city=" + town + "&postcode=" + postcode + "&paymentReason=" + cart;
+		data = Map();
+		data.put("long_url",link);
+		data.put("domain","secure.pay-bill.uk");
+		headers = Map();
+		headers.put("Authorization","Bearer 04a08a0c15e4da75ee7996709cbb548bfa8fb484");
+		headers.put("Content-Type","application/json");
+		response = invokeurl
+		[
+			url :"https://api-ssl.bitly.com/v4/shorten"
+			type :POST
+			parameters:data.toString()
+			headers:headers
+		];
+		finalLink = response.get("link");
+		text = "Payment Link for " + serviceNumber + " " + desc + " - " + finalLink;
+		name = owner.get("name");
+		channel = agents.get(name);
+		zoho.cliq.postToChannel(channel,text.toString(),"zohocliqconnection");
+	}
+}

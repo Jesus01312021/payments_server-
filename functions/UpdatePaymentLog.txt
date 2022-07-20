@@ -1,0 +1,43 @@
+newQueryMap = Map();
+newQueryMap.put("select_query","select Amount, Owner, id, Discount, Date, Outcome, Method from Process_Payments where Service_Number.Name = '" + service_number + "' ORDER BY Date DESC LIMIT 25");
+newRec = invokeurl
+[
+	url :"https://www.zohoapis.eu/crm/v3/coql"
+	type :POST
+	parameters:newQueryMap.toString()
+	connection:"crmconnection"
+];
+payment_subform = List();
+cnt = 1;
+for each  updatedPayment in newRec.get("data")
+{
+	uPaymentId = updatedPayment.get("id");
+	pmt = zoho.crm.getRecordById("Process_Payments",uPaymentId);
+	discount = pmt.get("Discount");
+	if(discount == null)
+	{
+		discount = 0;
+	}
+	amt = pmt.get("Amount");
+	agent = pmt.get("Owner").get("name");
+	payId = pmt.get("id");
+	amount = amt - discount;
+	paymentDate = pmt.get("Date");
+	status = pmt.get("Outcome");
+	source = pmt.get("Method");
+	data = Map();
+	data.put("Agent",agent);
+	data.put("Payment",payId);
+	data.put("Amount1",amount.toString());
+	data.put("Payment_Date",paymentDate);
+	data.put("No",toString(cnt));
+	data.put("Payment_Status",status);
+	data.put("Payment_Source",source);
+	payment_subform.add(data);
+	cnt = cnt + 1;
+}
+sale = zoho.crm.getRecordById("Customers",sale_id);
+account_id = sale.get("Account").get("id");
+update = {"Payments_Subform":payment_subform};
+resp = zoho.crm.updateRecord("Payments_Information",account_id,update);
+return resp;

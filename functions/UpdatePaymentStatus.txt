@@ -1,0 +1,17 @@
+payment = zoho.crm.getRecordById("Process_Payments",id);
+sale_id = payment.get("Service_Number").get("id");
+sale = zoho.crm.getRecordById("Customers",sale_id);
+status = payment.get("Outcome");
+account_id = sale.get("Account").get("id");
+account = zoho.crm.getRecordById("Payments_Information",account_id);
+paymentSubform = account.get("Payments_Subform").toJSONList();
+for each  record in paymentSubform
+{
+	payment_id = record.get("Payment").get("id");
+	if(payment_id == id)
+	{
+		record.update("Payment_Status",status);
+	}
+}
+update = {"Payments_Subform":paymentSubform};
+resp = zoho.crm.updateRecord("Payments_Information",account_id,update);

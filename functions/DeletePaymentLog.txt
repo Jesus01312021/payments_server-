@@ -1,0 +1,43 @@
+unsortedMap = Map();
+sortedList = List();
+sortingKeys = List();
+queryMap = Map();
+desc = "";
+if(reason_payment == "Engineering")
+{
+	desc = engType;
+	queryMap.put("select_query","select Amount, Owner, id, Discount, Date, Outcome, Method from Process_Payments where (((Service_Number.Name = '" + service_number + "') and (Engineering_Type = '" + desc + "')) and (Type = 'Engineering')) ORDER BY Date DESC");
+}
+else
+{
+	desc = reason_payment;
+	queryMap.put("select_query","select Amount, Owner, id, Discount, Date, Outcome, Method from Process_Payments where Service_Number.Name = '" + service_number + "' and Type = '" + desc + "' ORDER BY Date DESC");
+}
+rec = invokeurl
+[
+	url :"https://www.zohoapis.eu/crm/v3/coql"
+	type :POST
+	parameters:queryMap.toString()
+	connection:"crmconnection"
+];
+count = rec.get("data").size();
+for each  newPay in rec.get("data")
+{
+	newPayment = Map();
+	num = count.toString();
+	newPayment.put("id",newPay.get("id"));
+	newPayment.put("Name",desc + "-" + num);
+	sortedList.add(newPayment);
+	count = count - 1;
+}
+payObj = Map();
+payObj.put("obj",sortedList);
+resp = invokeurl
+[
+	url :"https://payments-server.boilercompanyuk.com/updatePaymentReference"
+	type :POST
+	parameters:payObj.toString()
+	content-type:"application/json"
+];
+resp = standalone.UpdatePaymentLog(service_number,sale_id);
+info resp;

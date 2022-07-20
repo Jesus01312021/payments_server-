@@ -1,0 +1,2 @@
+resp = standalone.UpdatePaymentLog(service_number,sale_id);
+info resp;

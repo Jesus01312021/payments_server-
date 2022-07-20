@@ -1,0 +1,69 @@
+payment = zoho.crm.getRecordById("Process_Payments",id);
+reason_payment = payment.get("Type");
+payment_reference = payment.get("Name");
+service_number = payment.get("Service_Number").get("name");
+engType = payment.get("Engineering_Type");
+sale_id = payment.get("Service_Number").get("id");
+engTypes = {"Deposit","One off works","No Access Fee","Call Out Fee","Install"};
+names = List();
+names.add(payment_reference.toList("-").get(0));
+if(reason_payment == "Engineering")
+{
+	if(!names.contains(engType))
+	{
+		names.add(engType);
+	}
+}
+else
+{
+	if(!names.contains(reason_payment))
+	{
+		names.add(reason_payment);
+	}
+}
+for each  name in names
+{
+	unsortedMap = Map();
+	sortedList = List();
+	sortingKeys = List();
+	queryMap = Map();
+	desc = "";
+	if(engTypes.contains(name))
+	{
+		desc = engType;
+		queryMap.put("select_query","select Amount, Owner, id, Discount, Date, Outcome, Method from Process_Payments where (((Service_Number.Name = '" + service_number + "') and (Engineering_Type = '" + name + "')) and (Type = 'Engineering')) ORDER BY Date DESC");
+	}
+	else
+	{
+		desc = reason_payment;
+		queryMap.put("select_query","select Amount, Owner, id, Discount, Date, Outcome, Method from Process_Payments where Service_Number.Name = '" + service_number + "' and Type = '" + name + "' ORDER BY Date DESC");
+	}
+	rec = invokeurl
+	[
+		url :"https://www.zohoapis.eu/crm/v3/coql"
+		type :POST
+		parameters:queryMap.toString()
+		connection:"crmconnection"
+	];
+	count = rec.get("data").size();
+	for each  newPay in rec.get("data")
+	{
+		newPayment = Map();
+		num = count.toString();
+		newPayment.put("id",newPay.get("id"));
+		newPayment.put("Name",name + "-" + num);
+		sortedList.add(newPayment);
+		count = count - 1;
+	}
+	payObj = Map();
+	payObj.put("obj",sortedList);
+	resp = invokeurl
+	[
+		url :"https://payments-server.boilercompanyuk.com/updatePaymentReference"
+		type :POST
+		parameters:payObj.toString()
+		content-type:"application/json"
+	];
+}
+resp = standalone.UpdatePaymentLog(service_number,sale_id);
+info resp;

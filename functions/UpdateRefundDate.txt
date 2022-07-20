@@ -1,0 +1,3 @@
+update = {"Refund_Date":today};
+resp = zoho.crm.updateRecord("Process_Payments",id,update);
+info resp;
